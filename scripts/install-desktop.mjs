@@ -40,6 +40,14 @@ if (process.platform !== 'linux') {
 }
 
 if (process.argv.includes('--uninstall') || process.argv.includes('-u')) {
+  const configHome = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+  const service = path.join(configHome, 'systemd', 'user', 'akkod.service');
+  if (fs.existsSync(service)) {
+    try { execSync('systemctl --user disable akkod.service', { stdio: 'ignore' }); } catch {}
+    remove(service);
+    try { execSync('systemctl --user daemon-reload', { stdio: 'ignore' }); } catch {}
+  }
+  remove(path.join(configHome, 'autostart', 'akkod.desktop'));
   remove(launcherPath);
   remove(desktopPath);
   remove(iconPath);

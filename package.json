@@ -45,6 +45,9 @@
       "src/main/**",
       "src/preload/**",
       "assets/akkod.png",
+      "assets/akkod-tray.png",
+      "assets/akkod-tray@2x.png",
+      "assets/akkod.ico",
       "package.json"
     ],
     "extraResources": [

@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, session, Menu, Tray, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execFile } = require('child_process');
+const autostart = require('./autostart');
 
 const VENDOR_ID = 0xfffe;
 const PRODUCT_ID = 0x000b;
@@ -16,16 +17,30 @@ if (process.platform === 'linux' && typeof app.setDesktopName === 'function') {
 }
 
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
+const startMinimized = process.argv.some((a) => ['--minimized', '--hidden', '--autostart'].includes(a));
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
-  });
+  // Launching akkod again (menu, taskbar, terminal) brings the running one forward.
+  app.on('second-instance', () => showWindow());
+}
+
+function showWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function quit() {
+  isQuitting = true;
+  app.quit();
 }
 
 const isAkko = (d) => d && d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID;
@@ -82,7 +97,105 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
+  // Closing the window keeps akkod in the tray; Quit in the tray menu really exits.
+  mainWindow.on('close', (e) => {
+    if (isQuitting || !tray) return;
+    e.preventDefault();
+    mainWindow.hide();
+    hintTrayOnce();
+  });
   mainWindow.on('closed', () => (mainWindow = null));
+}
+
+// ---------------------------------------------------------------- tray
+
+function trayImage() {
+  const assets = path.join(__dirname, '..', '..', 'assets');
+  if (process.platform === 'win32') {
+    const ico = path.join(assets, 'akkod.ico');
+    if (fs.existsSync(ico)) return nativeImage.createFromPath(ico);
+  }
+  // akkod-tray.png + akkod-tray@2x.png: Electron picks the sharp one on HiDPI.
+  return nativeImage.createFromPath(path.join(assets, 'akkod-tray.png'));
+}
+
+function createTray() {
+  if (tray) return;
+  try {
+    tray = new Tray(trayImage());
+  } catch (err) {
+    console.error('akkod: no system tray available:', err.message);
+    return;
+  }
+  tray.setToolTip('akkod');
+  tray.on('click', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()) mainWindow.hide();
+    else showWindow();
+  });
+  tray.on('double-click', () => showWindow());
+  updateTrayMenu();
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  let atLogin = false;
+  try {
+    atLogin = autostart.isEnabled();
+  } catch {}
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open akkod', click: () => showWindow() },
+      { label: 'Hide to tray', click: () => mainWindow && !mainWindow.isDestroyed() && mainWindow.hide() },
+      { type: 'separator' },
+      {
+        label: 'Start at login (in tray)',
+        type: 'checkbox',
+        checked: atLogin,
+        click: (item) => {
+          setAutostart(item.checked);
+        }
+      },
+      { type: 'separator' },
+      { label: 'Quit akkod', click: () => quit() }
+    ])
+  );
+}
+
+// Linux tray hosts (waybar, KDE...) may start after akkod at login; wait for one before adding the icon.
+function createTrayWhenReady(retries = 30) {
+  if (process.platform !== 'linux') return createTray();
+  execFile('busctl', ['--user', 'list'], { timeout: 1500 }, (err, out) => {
+    if ((!err && String(out).includes('StatusNotifierWatcher')) || retries <= 0) createTray();
+    else setTimeout(() => createTrayWhenReady(retries - 1), 500);
+  });
+}
+
+// Windows only: one balloon the first time the window goes to the tray, so it doesn't look like it quit.
+function hintTrayOnce() {
+  if (process.platform !== 'win32' || !tray) return;
+  const flag = path.join(app.getPath('userData'), 'tray-hint-shown');
+  if (fs.existsSync(flag)) return;
+  try {
+    fs.mkdirSync(path.dirname(flag), { recursive: true });
+    fs.writeFileSync(flag, '1');
+    tray.displayBalloon({
+      iconType: 'info',
+      title: 'akkod is still running',
+      content: 'It is in the tray. Click the icon to open it again, or right-click it to quit.'
+    });
+  } catch {}
+}
+
+function setAutostart(on) {
+  let result = false;
+  try {
+    result = autostart.setEnabled(!!on);
+  } catch (err) {
+    console.error('akkod: could not change start at login:', err.message);
+  }
+  updateTrayMenu();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('autostart:changed', result);
+  return result;
 }
 
 const backupsDir = () => path.join(app.getPath('userData'), 'backups');
@@ -90,6 +203,14 @@ const backupsDir = () => path.join(app.getPath('userData'), 'backups');
 // ---------------------------------------------------------------- IPC
 
 ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('autostart:get', () => {
+  try {
+    return autostart.isEnabled();
+  } catch {
+    return false;
+  }
+});
+ipcMain.handle('autostart:set', (_e, on) => setAutostart(!!on));
 
 ipcMain.handle('backup:first', async (_e, json) => {
   const dir = backupsDir();
@@ -192,10 +313,17 @@ ipcMain.handle('system:installUdev', async () => {
 
 app.whenReady().then(() => {
   setupHidPermissions();
-  createWindow();
-  app.on('activate', () => {
-    if (!mainWindow) createWindow();
-  });
+  createTrayWhenReady();
+  if (!startMinimized) createWindow();
+  app.on('activate', () => showWindow());
 });
 
-app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => {
+  isQuitting = true;
+});
+
+// With a tray icon akkod keeps running; without one (no tray host), closing quits as before.
+app.on('window-all-closed', () => {
+  if (!isQuitting && (tray || startMinimized)) return;
+  app.quit();
+});

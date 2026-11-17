@@ -15,6 +15,11 @@ let stopped = false;
 
 async function poll() {
   if (stopped) return;
+  // Hidden in the tray: don't keep talking to the keyboard 30 times a second.
+  if (document.hidden) {
+    timer = setTimeout(poll, 250);
+    return;
+  }
   try {
     const p = await pressedKeys();
     pressed.value = p;

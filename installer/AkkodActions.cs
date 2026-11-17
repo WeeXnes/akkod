@@ -140,6 +140,7 @@ if (Test-Path $manifest) {{
 Remove-Item -LiteralPath {Ps(startMenuLink)} -Force
 Remove-Item -LiteralPath {Ps(desktopLink)} -Force
 Remove-Item -Path 'HKCU:\{UninstallKey}' -Recurse -Force
+Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'akkod' -Force
 
 # Remove this script, then the folder if nothing else is left in it.
 $self = $MyInvocation.MyCommand.Path

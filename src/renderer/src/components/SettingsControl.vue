@@ -1,12 +1,24 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { settings } from '../lib/settings.js';
 import { connect } from '../lib/store.js';
 
 const version = ref('dev');
+const hasAutostart = !!window.akkod?.getAutostart;
+const autostart = ref(false);
+let offAutostart = null;
 onMounted(async () => {
   version.value = (await window.akkod?.getVersion?.()) || 'dev';
+  if (hasAutostart) {
+    autostart.value = await window.akkod.getAutostart();
+    offAutostart = window.akkod.onAutostartChanged((on) => (autostart.value = on));
+  }
 });
+onBeforeUnmount(() => offAutostart?.());
+
+async function toggleAutostart(on) {
+  autostart.value = await window.akkod.setAutostart(on);
+}
 
 function toggleSimulator(on) {
   settings.simulator = on;
@@ -19,7 +31,7 @@ function toggleSimulator(on) {
     <div class="section-header">
       <div>
         <h2 class="section-title">Settings</h2>
-        <p class="section-desc">How the keyboard is drawn, and the hardware simulator.</p>
+        <p class="section-desc">How the keyboard is drawn, startup, and the hardware simulator.</p>
       </div>
     </div>
 
@@ -68,6 +80,21 @@ function toggleSimulator(on) {
       </div>
 
       <div class="row-divider"></div>
+
+      <template v-if="hasAutostart">
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-title">Start at login</span>
+            <span class="setting-hint">Open akkod in the tray when you log in. Closing the window always keeps it in the tray; use Quit in the tray menu to exit.</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" :checked="autostart" @change="toggleAutostart($event.target.checked)" />
+            <span class="switch__slider"></span>
+          </label>
+        </div>
+
+        <div class="row-divider"></div>
+      </template>
 
       <div class="setting-row">
         <div class="setting-info">
