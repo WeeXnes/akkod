@@ -130,10 +130,25 @@ jobs:
         set -e
         rm -rf release
         npm run build
-        npx electron-builder --linux AppImage pacman deb --publish never
+        npx electron-builder --linux AppImage --publish never
     useTTY: true
     condition: SUCCESSFUL
     optional: false
+  - type: CommandStep
+    name: build pacman and deb packages
+    runInContainer: false
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -e
+        # electron-builder's bundled fpm needs libcrypt.so.1 (Arch: libxcrypt-compat).
+        # Prefer a system fpm when the agent has one.
+        if command -v fpm >/dev/null 2>&1; then export USE_SYSTEM_FPM=true; fi
+        npx electron-builder --linux pacman deb --publish never
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: true
   - type: CommandStep
     name: build windows app and installer
     runInContainer: false
@@ -158,7 +173,10 @@ jobs:
         set -e
         mkdir -p out
         rm -rf out/*
-        cp release/*.AppImage release/*.pacman release/*.deb release/*-win.zip release/akkod-setup-*.exe out/
+        cp release/*.AppImage release/*-win.zip release/akkod-setup-*.exe out/
+        for f in release/*.pacman release/*.deb; do
+          if [ -e "$f" ]; then cp "$f" out/; else echo "WARNING: no $f (pacman/deb step failed?)"; fi
+        done
         cd out && sha256sum * > SHA256SUMS && ls -lh
     useTTY: true
     condition: SUCCESSFUL
