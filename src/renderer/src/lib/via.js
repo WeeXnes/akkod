@@ -140,14 +140,21 @@ export class Via {
   }
 
   /** Bitmask rows: returns a Set of "row,col" strings currently pressed. */
+  // Switch matrix state (VIA protocol 12 / QMK via.c): request is [0x02, 0x03, rowOffset],
+  // reply echoes those three bytes and then carries each row big-endian from index 3.
   async getPressedKeys() {
-    const r = await this.send([CMD.GET_KEYBOARD_VALUE, KB_VALUE.SWITCH_MATRIX_STATE]);
-    const bytesPerRow = this.cols <= 8 ? 1 : this.cols <= 16 ? 2 : 4;
+    const bytesPerRow = Math.ceil(this.cols / 8);
+    const rowsPerQuery = Math.floor(28 / bytesPerRow);
     const pressed = new Set();
-    for (let row = 0; row < this.rows; row++) {
-      let v = 0;
-      for (let b = 0; b < bytesPerRow; b++) v = (v << 8) | r[2 + row * bytesPerRow + b];
-      for (let col = 0; col < this.cols; col++) if ((v >>> col) & 1) pressed.add(`${row},${col}`);
+    for (let offset = 0; offset < this.rows; offset += rowsPerQuery) {
+      const r = await this.send([CMD.GET_KEYBOARD_VALUE, KB_VALUE.SWITCH_MATRIX_STATE, offset]);
+      for (let i = 0; i < rowsPerQuery && offset + i < this.rows; i++) {
+        let v = 0;
+        for (let b = 0; b < bytesPerRow; b++) v = v * 256 + r[3 + i * bytesPerRow + b];
+        for (let col = 0; col < this.cols; col++) {
+          if (Math.floor(v / 2 ** col) % 2) pressed.add(`${offset + i},${col}`);
+        }
+      }
     }
     return pressed;
   }

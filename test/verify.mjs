@@ -115,4 +115,24 @@ await t('matrix state decoding', async () => {
   assert.deepEqual([...p].sort(), ['0,2', '3,12']);
 });
 
+await t('matrix wire format matches QMK via.c', async () => {
+  // Hand-built firmware reply: [0x02, 0x03, offset, row0 hi, row0 lo, row1 hi, ...].
+  let request;
+  const fake = {
+    async exchange(pkt) {
+      request = [...pkt.slice(0, 3)];
+      const out = new Uint8Array(32);
+      out.set(pkt.slice(0, 3));
+      out[3 + 0 * 2 + 1] = 0x04; // row 0, col 2
+      out[3 + 3 * 2 + 0] = 0x10; // row 3, col 12
+      out[3 + 5 * 2 + 0] = 0x80; // row 5, col 15
+      out[3 + 5 * 2 + 1] = 0x01; // row 5, col 0
+      return out;
+    },
+  };
+  const p = await new Via(fake, { rows: 6, cols: 16 }).getPressedKeys();
+  assert.deepEqual(request, [0x02, 0x03, 0x00]);
+  assert.deepEqual([...p].sort(), ['0,2', '3,12', '5,0', '5,15']);
+});
+
 console.log(`\n${passed} checks passed`);

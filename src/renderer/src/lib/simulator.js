@@ -26,9 +26,12 @@ export class SimulatorTransport {
         break;
       case CMD.GET_KEYBOARD_VALUE:
         if (pkt[1] === KB_VALUE.SWITCH_MATRIX_STATE) {
+          // Mirrors QMK via.c: rows from pkt[2] onward, 2 bytes each (16 cols), big-endian, from index 3.
+          const offset = pkt[2];
           for (const k of this.pressed) {
             const [r, c] = k.split(',').map(Number);
-            const i = 2 + r * 2 + (c >= 8 ? 0 : 1);
+            if (r < offset || r - offset >= 14) continue;
+            const i = 3 + (r - offset) * 2 + (c >= 8 ? 0 : 1);
             out[i] |= 1 << (c % 8);
           }
         }
