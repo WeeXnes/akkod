@@ -1,7 +1,7 @@
 {
   "name": "akkod",
   "productName": "akkod",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Configuration tool for the Akko 5075S (QMK/VIA): keymap, knob, lighting.",
   "main": "src/main/main.js",
   "author": {
