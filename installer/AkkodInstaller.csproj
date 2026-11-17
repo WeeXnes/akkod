@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>akkod-setup</AssemblyName>
+    <RootNamespace>AkkodInstaller</RootNamespace>
+    <ApplicationIcon>..\assets\akkod.ico</ApplicationIcon>
+    <Product>akkod Setup</Product>
+    <Company>WeeXnes</Company>
+    <Version>1.0.0</Version>
+    <!-- Let the payload zip and app version follow akkod's package.json (set by build.sh). -->
+    <AkkodVersion Condition="'$(AkkodVersion)' == ''">1.0.0</AkkodVersion>
+  </PropertyGroup>
+
+  <!-- Exclude subfolder framework source & XAML files from direct globbing compilation -->
+  <ItemGroup>
+    <Compile Remove="lib\**" />
+    <EmbeddedResource Remove="lib\**" />
+    <None Remove="lib\**" />
+    <AvaloniaXaml Remove="lib\**" />
+  </ItemGroup>
+
+  <!-- The Windows build of akkod, embedded in the installer exe. build.sh copies it here. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Payload\akkod-win.zip" LogicalName="AkkodInstaller.Payload.akkod-win.zip" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AkkodVersion</_Parameter1>
+      <_Parameter2>$(AkkodVersion)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="lib\InstallerFramework\src\InstallerFramework.Core\InstallerFramework.Core.csproj" />
+    <ProjectReference Include="lib\InstallerFramework\src\InstallerFramework.UI\InstallerFramework.UI.csproj" />
+  </ItemGroup>
+
+</Project>

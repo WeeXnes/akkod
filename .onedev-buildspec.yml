@@ -1,0 +1,180 @@
+version: 57
+jobs:
+- name: Verify
+  executeInSandbox: false
+  jobExecutor: Builder
+  steps:
+  - type: CheckoutStep
+    name: checkout code
+    cloneCredential:
+      type: DefaultCredential
+    withLfs: false
+    withSubmodules: false
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: install and test
+    runInContainer: false
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -e
+        npm ci --no-audit --no-fund
+        npm test
+        npm run build
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: BranchUpdateTrigger
+    userMatch: anyone
+  - type: PullRequestUpdateTrigger
+  retryCondition: never
+  maxAttempts: 4
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 3600
+- name: Tag Release
+  executeInSandbox: false
+  jobExecutor: Builder
+  steps:
+  - type: CheckoutStep
+    name: checkout code
+    cloneCredential:
+      type: DefaultCredential
+    withLfs: false
+    withSubmodules: false
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: get version
+    runInContainer: false
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -e
+        version=$(node -p "require('./package.json').version")
+        echo "$version" > version.txt
+        echo "package.json version: $version"
+        if git ls-remote --tags origin | grep -q "refs/tags/v${version}$"; then
+          echo "Tag v$version already exists. Bump \"version\" in package.json to release."
+          echo "${version}-@commit_hash@" > version.txt
+          exit 1
+        fi
+        echo "v$version" > tag.txt
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  - type: SetBuildVersionStep
+    name: set build version
+    buildVersion: '@file:version.txt@'
+    condition: ALWAYS
+    optional: false
+  - type: CreateTagStep
+    name: create tag
+    tagName: '@file:tag.txt@'
+    tagMessage: akkod @file:version.txt@
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: BranchUpdateTrigger
+    branches: master
+    paths: package.json
+    userMatch: anyone
+  retryCondition: never
+  maxAttempts: 4
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 3600
+- name: Build Release
+  executeInSandbox: false
+  jobExecutor: Builder
+  steps:
+  - type: CheckoutStep
+    name: checkout code
+    cloneCredential:
+      type: DefaultCredential
+    withLfs: false
+    withSubmodules: false
+    condition: SUCCESSFUL
+    optional: false
+  - type: SetBuildVersionStep
+    name: set build version
+    buildVersion: '@tag@'
+    condition: ALWAYS
+    optional: false
+  - type: CommandStep
+    name: install and test
+    runInContainer: false
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -e
+        npm ci --no-audit --no-fund
+        npm test
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: build linux packages
+    runInContainer: false
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -e
+        rm -rf release
+        npm run build
+        npx electron-builder --linux AppImage pacman deb --publish never
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: build windows app and installer
+    runInContainer: false
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -e
+        npx electron-builder --win zip --publish never
+        chmod +x installer/setup.sh installer/build.sh
+        ./installer/build.sh
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  - type: CommandStep
+    name: collect artifacts
+    runInContainer: false
+    interpreter:
+      type: PosixInterpreter
+      shell: sh
+      commands: |
+        set -e
+        mkdir -p out
+        rm -rf out/*
+        cp release/*.AppImage release/*.pacman release/*.deb release/*-win.zip release/akkod-setup-*.exe out/
+        cd out && sha256sum * > SHA256SUMS && ls -lh
+    useTTY: true
+    condition: SUCCESSFUL
+    optional: false
+  - type: PublishArtifactStep
+    name: upload artifacts
+    sourcePath: out
+    artifacts: '**'
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: TagCreateTrigger
+    tags: v*
+  retryCondition: never
+  maxAttempts: 4
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 14400

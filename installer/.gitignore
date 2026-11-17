@@ -1,0 +1,24 @@
+# InstallerFramework source code (pulled dynamically via setup script / git repo link)
+lib/InstallerFramework/
+
+# Build results & binaries
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+publish/
+Payload/
+
+# Visual Studio / Rider / IDEs
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+Payload/

@@ -1,0 +1,2 @@
+# Akko 5075S (QMK/VIA): let the logged-in user open this keyboard's raw HID interface.
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="fffe", ATTRS{idProduct}=="000b", MODE="0660", TAG+="uaccess"
