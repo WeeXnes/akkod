@@ -1,4 +1,4 @@
-version: 57
+version: 59
 jobs:
 - name: Verify
   executeInSandbox: false
@@ -196,3 +196,26 @@ jobs:
   includeUpstreamWhenRebuild: false
   includeDownstreamWhenRebuild: false
   timeout: 14400
+- name: Mirror to GitHub
+  executeInSandbox: false
+  jobExecutor: Builder
+  steps:
+  - type: PushRepository
+    name: push to github.com/WeeXnes/akkod
+    remoteUrl: https://github.com/WeeXnes/akkod.git
+    userName: WeeXnes
+    passwordSecret: github-mirror-token
+    force: false
+    condition: SUCCESSFUL
+    optional: false
+  triggers:
+  - type: BranchUpdateTrigger
+    userMatch: anyone
+  - type: TagCreateTrigger
+    projects: akkod
+  retryCondition: never
+  maxAttempts: 4
+  retryDelay: 30
+  includeUpstreamWhenRebuild: false
+  includeDownstreamWhenRebuild: false
+  timeout: 3600
