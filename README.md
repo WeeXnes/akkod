@@ -12,7 +12,7 @@
 
 ---
 
-It runs on Linux and Windows, with the same look as [razerd](../razerd) (`DESIGN.md`).
+It runs on Linux and Windows, with the same look as [razerd](https://github.com/WeeXnes/razerd).
 It talks to the keyboard over the VIA raw-HID interface (usage page `0xFF60`), the same channel the VIA app uses.
 No VIA, Python, drivers or OpenRazer are needed.
 
